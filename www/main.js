@@ -56,3 +56,10 @@ function saveNewGameDataScore(score, coinsEarned = 0) {
 
     loadGameHistoryData();
 }
+
+function startGameIntro() {
+  const intro = document.getElementById("intro-screen");
+  if (intro) {
+    intro.style.display = "none";
+  }
+}
