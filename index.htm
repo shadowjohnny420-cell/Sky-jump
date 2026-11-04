@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sky Jump Mobile</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Responsive Canvas
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // 8-bit Sound Generator using Web Audio API (No files needed)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new AudioContext();
+    }
+
+    function playSound(type) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === "jump") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      } else if (type === "score") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(780, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      } else if (type === "hit") {
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.25);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+      }
+    }
+
+    // AdMob Trigger Variables
+    let deathCount = 0;
+    const BANNER_AD_ID = "ca-app-pub-3940256099942544/6300978111"; // Official Google Test ID
+    const INTERSTITIAL_AD_ID = "ca-app-pub-3940256099942544/1033173712"; // Official Google Test ID
+
+    async function initAdMob() {
+      if (window.Capacitor && window.Capacitor.isPluginAvailable("AdMob")) {
+        const { AdMob } = window.Capacitor.Plugins;
+        await AdMob.initialize();
+        await AdMob.showBanner({
+          adId: BANNER_AD_ID,
+          position: "BOTTOM_CENTER",
+          margin: 0
+        });
+        await AdMob.prepareInterstitial({ adId: INTERSTITIAL_AD_ID });
+      }
+    }
+
+    async function showAdOnGameOver() {
+      deathCount++;
+      if (deathCount % 3 === 0) { // Har 3 out hone par Interstitial ad
+        if (window.Capacitor && window.Capacitor.isPluginAvailable("AdMob")) {
+          const { AdMob } = window.Capacitor.Plugins;
+          await AdMob.showInterstitial();
+          await AdMob.prepareInterstitial({ adId: INTERSTITIAL_AD_ID });
+        }
+      }
+    }
+
+    // Clouds
+    let clouds = [
+      { x: 40, y: 80, speed: 0.5, r: 28 },
+      { x: 220, y: 140, speed: 0.3, r: 35 },
+      { x: 120, y: 220, speed: 0.6, r: 22 }
+    ];
+
+    function updateClouds() {
+      for (let c of clouds) {
+        c.x -= c.speed;
+        if (c.x + c.r * 2 < 0) {
+          c.x = canvas.width + c.r * 2;
+          c.y = Math.random() * (canvas.height * 0.4) + 40;
+        }
+      }
+    }
+
+    function drawClouds() {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+      for (let c of clouds) {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+        ctx.arc(c.x + c.r * 0.6, c.y - c.r * 0.2, c.r * 0.8, 0, Math.PI * 2);
+        ctx.arc(c.x + c.r * 1.2, c.y, c.r * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Game Core
+    let frames = 0;
+    let score = 0;
+    let highScore = 0;
+    let gameState = "START";
+
+    const bird = {
+      x: 70,
+      y: 200,
+      radius: 16,
+      gravity: 0.32,
+      jump: -6.4,
+      speed: 0,
+      rotation: 0,
+      draw: function() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        this.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.speed * 4) * Math.PI / 180));
+        ctx.rotate(this.rotation);
+
+        // Body
+        ctx.fillStyle = "#facc15";
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ca8a04";
+        ctx.stroke();
+
+        // Eye
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(6, -4, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#000000";
+        ctx.beginPath();
+        ctx.arc(8, -4, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Beak
+        ctx.fillStyle = "#ea580c";
+        ctx.beginPath();
+        ctx.moveTo(12, 0);
+        ctx.lineTo(22, 4);
+        ctx.lineTo(12, 8);
+        ctx.closePath();
+        ctx.fill();
+
+        // Wing
+        ctx.fillStyle = "#eab308";
+        ctx.beginPath();
+        ctx.ellipse(-6, 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      },
+      flap: function() {
+        this.speed = this.jump;
+        playSound("jump");
+      },
+      update: function() {
+        this.speed += this.gravity;
+        this.y += this.speed;
+
+        if (this.y + this.radius >= canvas.height - 30) {
+          this.y = canvas.height - 30 - this.radius;
+          gameOver();
+        }
+        if (this.y - this.radius <= 0) {
+          this.y = this.radius;
+          this.speed = 0;
+        }
+      },
+      reset: function() {
+        this.y = canvas.height / 2;
+        this.speed = 0;
+      }
+    };
+
+    const pipes = {
+      position: [],
+      gap: 150,
+      width: 55,
+      dx: 2.4,
+      draw: function() {
+        for (let p of this.position) {
+          let topY = p.y;
+          let bottomY = p.y + this.gap;
+
+          // Top Pipe
+          let gradTop = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+          gradTop.addColorStop(0, "#22c55e");
+          gradTop.addColorStop(0.5, "#4ade80");
+          gradTop.addColorStop(1, "#15803d");
+          ctx.fillStyle = gradTop;
+          ctx.fillRect(p.x, 0, this.width, topY);
+          ctx.strokeStyle = "#052e16";
+          ctx.strokeRect(p.x, 0, this.width, topY);
+
+          // Top Pipe Cap
+          ctx.fillRect(p.x - 3, topY - 20, this.width + 6, 20);
+          ctx.strokeRect(p.x - 3, topY - 20, this.width + 6, 20);
+
+          // Bottom Pipe
+          let gradBottom = ctx.createLinearGradient(p.x, 0, p.x + this.width, 0);
+          gradBottom.addColorStop(0, "#22c55e");
+          gradBottom.addColorStop(0.5, "#4ade80");
+          gradBottom.addColorStop(1, "#15803d");
+          ctx.fillStyle = gradBottom;
+          ctx.fillRect(p.x, bottomY, this.width, canvas.height - bottomY - 30);
+          ctx.strokeRect(p.x, bottomY, this.width, canvas.height - bottomY - 30);
+
+          // Bottom Pipe Cap
+          ctx.fillRect(p.x - 3, bottomY, this.width + 6, 20);
+          ctx.strokeRect(p.x - 3, bottomY, this.width + 6, 20);
+        }
+      },
+      update: function() {
+        if (frames % 110 === 0) {
+          let maxPos = canvas.height - this.gap - 120;
+          let randomY = Math.floor(Math.random() * (maxPos - 60)) + 60;
+          this.position.push({ x: canvas.width, y: randomY, passed: false });
+        }
+
+        for (let i = 0; i < this.position.length; i++) {
+          let p = this.position[i];
+          p.x -= this.dx;
+
+          // Collision detection
+          let birdRight = bird.x + bird.radius - 3;
+          let birdLeft = bird.x - bird.radius + 3;
+          let birdTop = bird.y - bird.radius + 3;
+          let birdBottom = bird.y + bird.radius - 3;
+
+          let pipeRight = p.x + this.width;
+          let pipeLeft = p.x;
+          let topPipeBottom = p.y;
+          let bottomPipeTop = p.y + this.gap;
+
+          if (birdRight > pipeLeft && birdLeft < pipeRight) {
+            if (birdTop < topPipeBottom || birdBottom > bottomPipeTop) {
+              gameOver();
+            }
+          }
+
+          if (!p.passed && pipeRight < bird.x) {
+            score++;
+            p.passed = true;
+            playSound("score");
+          }
+
+          if (pipeRight < 0) {
+            this.position.shift();
+            i--;
+          }
+        }
+      },
+      reset: function() {
+        this.position = [];
+      }
+    };
+
+    function drawGround() {
+      // Grass Top
+      ctx.fillStyle = "#84cc16";
+      ctx.fillRect(0, canvas.height - 30, canvas.width, 8);
+      // Dirt Base
+      ctx.fillStyle = "#713f12";
+      ctx.fillRect(0, canvas.height - 22, canvas.width, 22);
+    }
+
+    function gameOver() {
+      playSound("hit");
+      gameState = "GAMEOVER";
+      if (score > highScore) {
+        highScore = score;
+      }
+      showAdOnGameOver();
+    }
+
+    function handleInput(e) {
+      if (e) e.preventDefault();
+      initAudio();
+
+      if (gameState === "START") {
+        gameState = "PLAYING";
+        bird.flap();
+      } else if (gameState === "PLAYING") {
+        bird.flap();
+      } else if (gameState === "GAMEOVER") {
+        bird.reset();
+        pipes.reset();
+        score = 0;
+        frames = 0;
+        gameState = "PLAYING";
+      }
+    }
+
+    window.addEventListener("pointerdown", handleInput, { passive: false });
+
+    function loop() {
+      // Sky Background
+      let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      skyGrad.addColorStop(0, "#38bdf8");
+      skyGrad.addColorStop(0.7, "#bae6fd");
+      skyGrad.addColorStop(1, "#f0f9ff");
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      updateClouds();
+      drawClouds();
+
+      if (gameState === "PLAYING") {
+        bird.update();
+        pipes.update();
+        frames++;
+      }
+
+      pipes.draw();
+      drawGround();
+      bird.draw();
+
+      // In-game Score Display
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 4;
+      ctx.font = "900 36px sans-serif";
+      ctx.textAlign = "center";
+      ctx.strokeText(score, canvas.width / 2, 80);
+      ctx.fillText(score, canvas.width / 2, 80);
+
+      if (gameState === "START") {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.4)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 26px sans-serif";
+        ctx.fillText("TAP TO FLY", canvas.width / 2, canvas.height / 2);
+      } else if (gameState === "GAMEOVER") {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.65)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#ef4444";
+        ctx.lineWidth = 5;
+        ctx.strokeText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+
+        ctx.fillStyle = "#facc15";
+        ctx.font = "bold 22px sans-serif";
+        ctx.lineWidth = 3;
+        ctx.strokeText("Best: " + highScore, canvas.width / 2, canvas.height / 2 + 10);
+        ctx.fillText("Best: " + highScore, canvas.width / 2, canvas.height / 2 + 10);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("Tap to Retry", canvas.width / 2, canvas.height / 2 + 60);
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    initAdMob();
+    loop();
+  </script>
+</body>
+</html>
+

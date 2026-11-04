@@ -1,0 +1,10 @@
+{
+  "appId": "com.johnson.skyjump",
+  "appName": "Sky Jump",
+  "webDir": "www",
+  "plugins": {
+    "AdMob": {
+      "androidAppId": "ca-app-pub-3940256099942544~3347511713"
+    }
+  }
+}
