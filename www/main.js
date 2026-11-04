@@ -1,45 +1,58 @@
-
 // Dynamic game data state check logic
 document.addEventListener("DOMContentLoaded", function() {
-  loadGameHistoryData();
+    loadGameHistoryData();
 });
 
 function loadGameHistoryData() {
-  // Local storage se standard game state access aur values generate
-  const highScore = localStorage.getItem("skyjump_highscore") || "0";
-  const totalMatches = localStorage.getItem("skyjump_matches") || "0";
-  const coinsCollected = localStorage.getItem("skyjump_coins") || "450";
-  
-  // Array metrics data sets for last plays back history values
-  const playHistory = JSON.parse(localStorage.getItem("skyjump_history") || "[]");
+    const highScore = localStorage.getItem("skyjump_highscore") || "0";
+    const totalMatches = localStorage.getItem("skyjump_matches") || "0";
+    const coinsCollected = localStorage.getItem("skyjump_coins") || "450";
 
-  document.getElementById("board-high-score").innerText = highScore;
-  document.getElementById("board-matches").innerText = totalMatches;
-  document.getElementById("board-coins").innerText = coinsCollected;
+    let playHistory = [];
+    try {
+        playHistory = JSON.parse(localStorage.getItem("skyjump_history")) || [];
+    } catch(e) {
+        playHistory = [];
+    }
 
-  // Real-time render scorecard box elements
-  document.getElementById("hist-1").innerText = playHistory[0] || "-";
-  document.getElementById("hist-2").innerText = playHistory[1] || "-";
-  document.getElementById("hist-3").innerText = highScore;
+    const elHighScore = document.getElementById("board-high-score");
+    const elMatches = document.getElementById("board-matches");
+    const elCoins = document.getElementById("board-coins");
+    const elHist1 = document.getElementById("hist-1");
+    const elHist2 = document.getElementById("hist-2");
+    const elHist3 = document.getElementById("hist-3");
+
+    if (elHighScore) elHighScore.innerText = highScore;
+    if (elMatches) elMatches.innerText = totalMatches;
+    if (elCoins) elCoins.innerText = coinsCollected;
+
+    if (elHist1) elHist1.innerText = playHistory[0] !== undefined ? playHistory[0] : "-";
+    if (elHist2) elHist2.innerText = playHistory[1] !== undefined ? playHistory[1] : "-";
+    if (elHist3) elHist3.innerText = highScore;
 }
 
-// Data updating utility logic trigger in-game play finished event state
-function saveNewGameDataScore(score, coinsEarned) {
-  let matches = parseInt(localStorage.getItem("skyjump_matches") || "0") + 1;
-  let coins = parseInt(localStorage.getItem("skyjump_coins") || "450") + coinsEarned;
-  let history = JSON.parse(localStorage.getItem("skyjump_history") || "[]");
-  let currentHighScore = parseInt(localStorage.getItem("skyjump_highscore") || "0");
+function saveNewGameDataScore(score, coinsEarned = 0) {
+    let matches = (parseInt(localStorage.getItem("skyjump_matches"), 10) || 0) + 1;
+    let coins = (parseInt(localStorage.getItem("skyjump_coins"), 10) || 450) + coinsEarned;
+    let currentHighScore = parseInt(localStorage.getItem("skyjump_highscore"), 10) || 0;
 
-  if (score > currentHighScore) {
-    localStorage.setItem("skyjump_highscore", score);
-  }
+    let history = [];
+    try {
+        history = JSON.parse(localStorage.getItem("skyjump_history")) || [];
+    } catch(e) {
+        history = [];
+    }
 
-  history.unshift(score);
-  if (history.length > 5) history.pop();
+    if (score > currentHighScore) {
+        localStorage.setItem("skyjump_highscore", score.toString());
+    }
 
-  localStorage.setItem("skyjump_matches", matches);
-  localStorage.setItem("skyjump_coins", coins);
-  localStorage.setItem("skyjump_history", JSON.stringify(history));
+    history.unshift(score);
+    if (history.length > 5) history.pop();
 
-  loadGameHistoryData(); // refreshing real-time UI values
+    localStorage.setItem("skyjump_matches", matches.toString());
+    localStorage.setItem("skyjump_coins", coins.toString());
+    localStorage.setItem("skyjump_history", JSON.stringify(history));
+
+    loadGameHistoryData();
 }
