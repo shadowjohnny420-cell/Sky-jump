@@ -11,6 +11,28 @@
   </style>
 </head>
 <body>
+  <div id="intro-screen">
+    <div class="board-wrapper">
+      <div class="board-title">🏆 Top Board</div>
+      <div>High: <span id="board-high-score">0</span></div>
+      <div>Matches: <span id="board-matches">0</span></div>
+    </div>
+    <div class="coin-box">
+      <span class="coin-icon">🪙</span>
+      <span id="board-coins">450</span>
+    </div>
+    <h1 class="intro-title">SKY JUMP</h1>
+    <img src="assets/icon.png" class="intro-bird" alt="Bird">
+    <button class="play-btn" onclick="startGameIntro()">TAP TO FLY</button>
+    <div class="score-history-box">
+      <div class="history-title">🕒 SCORECARD HISTORY</div>
+      <ul class="history-list" id="history-view">
+        <li class="history-item">Recent<div class="history-score" id="hist-1">-</div></li>
+        <li class="history-item">Previous<div class="history-score" id="hist-2">-</div></li>
+        <li class="history-item">Best<div class="history-score" id="hist-3">-</div></li>
+      </ul>
+    </div>
+  </div>
   <canvas id="gameCanvas"></canvas>
   <script>
     const canvas = document.getElementById("gameCanvas");
